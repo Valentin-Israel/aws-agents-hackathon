@@ -1,4 +1,6 @@
-# 🏛️ AGORA — The AI Government https://agora.valentin.is/
+# 🏛️ AGORA — The AI Government 
+
+## https://agora.valentin.is/
 
 Deliberation as infrastructure, built at AWS × Rebura "Build with Agents" (Munich, Jun 2026).
 See `WHITEPAPER.md` for the full vision.
