@@ -421,7 +421,7 @@ def main() -> None:
     )
     st.session_state["petition"] = petition
 
-    col_toggle, col_btn = st.columns([3, 1])
+    col_toggle, col_btn, col_new = st.columns([3, 1, 1])
     with col_toggle:
         binding = st.toggle(
             "🗳️  Binding citizens' initiative — Art. 1 (parliament shapes implementation only; "
@@ -435,6 +435,14 @@ def main() -> None:
             disabled=not petition.strip(),
             use_container_width=True,
         )
+    with col_new:
+        if st.session_state.get("last_run") and st.button(
+            "＋  New petition", use_container_width=True
+        ):
+            st.session_state.pop("last_run", None)
+            st.session_state["petition"] = ""
+            st.session_state["binding"] = False
+            st.rerun()
 
     st.divider()
 
