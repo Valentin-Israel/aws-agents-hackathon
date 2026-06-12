@@ -397,6 +397,7 @@ def main() -> None:
   <h1>🏛️ AGORA</h1>
   <div class="tagline">The AI Government · Deliberation as Infrastructure</div>
   <div class="sub">Four ministers · mandated opposition · constitutional court · every argument published</div>
+  <div class="sub" style="margin-top:.5rem"><a href="https://github.com/Valentin-Israel/aws-agents-hackathon" target="_blank" style="color:#005577;text-decoration:none">⌥ github.com/Valentin-Israel/aws-agents-hackathon</a></div>
 </div>""", unsafe_allow_html=True)
 
     st.divider()
