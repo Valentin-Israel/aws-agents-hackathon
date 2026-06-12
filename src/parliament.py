@@ -113,7 +113,13 @@ def run_pipeline(petition: str, registry: Registry, binding: bool = False):
     else:
         bill_instruction = (
             "Merge the petition and the strongest amendments into the final bill. "
-            "Improve precision and address the stated concerns."
+            "CRITICAL CONSTRAINT: you are a drafter, not a judge. You MUST preserve "
+            "the petition's core mechanism — the thing the citizen actually asked for. "
+            "Amendments may narrow scope, add process, set conditions or thresholds, "
+            "but may NOT eliminate, reverse, or replace the core mechanism. If the "
+            "petition asks for a ban, the bill must still contain a ban (perhaps "
+            "narrowed). If it asks for a tax, the bill must still contain a tax. "
+            "It is the parliament's vote — not yours — that decides whether to enact it."
         )
         bill_opening = "The Parliament of AGORA enacts:"
     bill = safe_call(
@@ -132,13 +138,28 @@ def run_pipeline(petition: str, registry: Registry, binding: bool = False):
         passed, result = True, "ENACTED BY CITIZENS' INITIATIVE"
         yield {"stage": "tally", "yes": 0, "no": 0, "abstain": 0, "passed": True, "binding": True}
     else:
-        for m, agent in cabinet:
+        for (m, agent), pos in zip(cabinet, positions):
             raw = safe_call(
                 agent,
-                "The Chancellor has merged the amendments into the final bill.\n\n"
-                f"BILL: {bill}\n\n"
-                f"THE OPPOSITION'S OBJECTION (on the record): {opposition}\n\n"
-                f"Cast your vote on the bill as {m['name']}. STRICT JSON only:\n"
+                "The Chancellor has produced the final bill. You must now vote.\n\n"
+                f"ORIGINAL PETITION (what the citizen asked for): {petition}\n\n"
+                f"FINAL BILL:\n{bill}\n\n"
+                f"YOUR POSITION DURING DELIBERATION: {pos['position']}\n\n"
+                "VOTING RULES — you hold fixed values and vote your conscience:\n"
+                "1. First ask: does the bill still enact the core intent of the "
+                "original petition, or has it become something fundamentally different?\n"
+                "2. If you said AGAINST the petition and the bill still executes its "
+                "core intent (even with conditions added), vote NO. Conditions, audits, "
+                "caps and sunset clauses do not resolve a fundamental value objection — "
+                "they just soften something you still oppose.\n"
+                "3. Only vote YES on an AGAINST position if the bill has abandoned or "
+                "reversed the specific mechanism you objected to — not merely "
+                "restricted it.\n"
+                "4. If you said FOR or SKEPTICAL and the bill broadly aligns with your "
+                "values, vote YES.\n"
+                "5. Vote ABSTAIN only if the bill's effect on your portfolio is "
+                "genuinely indeterminate.\n\n"
+                f"Cast your vote as {m['name']}. STRICT JSON only:\n"
                 '{"vote": "YES" | "NO" | "ABSTAIN", "reason": "<max 15 words>"}',
             )
             data = extract_json(raw) or {}
