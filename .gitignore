@@ -5,3 +5,4 @@ __pycache__/
 venv/
 .aws/
 *.egg-info/
+laws.json
