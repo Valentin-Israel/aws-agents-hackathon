@@ -18,17 +18,23 @@ def main() -> None:
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(description="AGORA — the AI government")
     parser.add_argument("petition", help="citizen petition, plain language")
+    parser.add_argument(
+        "--binding", action="store_true",
+        help="run as binding citizens' initiative (Art. 1): parliament shapes "
+             "implementation only; the court alone can stop it",
+    )
     args = parser.parse_args()
 
     registry = Registry()
     voting_open = False
-    for ev in run_pipeline(args.petition, registry):
+    for ev in run_pipeline(args.petition, registry, binding=args.binding):
         stage = ev["stage"]
         if stage == "vote" and not voting_open:
             _rule("VOTE")
             voting_open = True
         if stage == "start":
-            _rule(f"PETITION  ({ev['law_id']})")
+            kind = "BINDING CITIZENS' INITIATIVE" if ev.get("binding") else "PETITION"
+            _rule(f"{kind}  ({ev['law_id']})")
             print(ev["petition"])
         elif stage == "precedents":
             if ev["laws"]:
@@ -50,10 +56,15 @@ def main() -> None:
             m = ev["minister"]
             print(f"  {m['emoji']} {m['name']}: {ev['vote']} — {ev['reason']}")
         elif stage == "tally":
-            print(
-                f"\n  RESULT: {'PASSED' if ev['passed'] else 'REJECTED'} "
-                f"({ev['yes']} YES / {ev['no']} NO / {ev['abstain']} ABSTAIN)"
-            )
+            if ev.get("binding"):
+                _rule("ENACTMENT")
+                print("  ENACTED by binding citizens' initiative — Art. 1 Human Sovereignty.")
+                print("  No parliamentary vote: only the Constitutional Court can stop it.")
+            else:
+                print(
+                    f"\n  RESULT: {'PASSED' if ev['passed'] else 'REJECTED'} "
+                    f"({ev['yes']} YES / {ev['no']} NO / {ev['abstain']} ABSTAIN)"
+                )
         elif stage == "decree":
             _rule(f"DECREE {ev['law_id']}")
             print(ev["text"])

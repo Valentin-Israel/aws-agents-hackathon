@@ -40,11 +40,26 @@ def _public(m: dict) -> dict:
     return {"name": m["name"], "emoji": m["emoji"], "portfolio": m["portfolio"]}
 
 
-def run_pipeline(petition: str, registry: Registry):
+def run_pipeline(petition: str, registry: Registry, binding: bool = False):
+    """Full procedure for one petition.
+
+    binding=True runs the petition as a binding citizens' initiative under
+    Art. 1 (Human Sovereignty): parliament debates and shapes implementation
+    but cannot reject or invert the core mechanism, and no minister vote is
+    taken — only the Constitutional Court can stop it.
+    """
     law_id = registry.next_id()
     precedents = registry.recent(3)
-    yield {"stage": "start", "petition": petition, "law_id": law_id}
+    yield {"stage": "start", "petition": petition, "law_id": law_id, "binding": binding}
     yield {"stage": "precedents", "laws": precedents}
+
+    binding_note = (
+        "\nThis petition is a BINDING CITIZENS' INITIATIVE under Art. 1 "
+        "(Human Sovereignty): parliament cannot reject or invert it. Your "
+        "amendment may only shape HOW it is implemented.\n"
+        if binding
+        else ""
+    )
 
     # 1 — Deliberation: each minister states a position + optional amendment.
     cabinet = build_cabinet()
@@ -53,7 +68,7 @@ def run_pipeline(petition: str, registry: Registry):
         raw = safe_call(
             agent,
             "A citizen petition has been submitted to the Parliament of AGORA.\n\n"
-            f'PETITION: "{petition}"\n\n'
+            f'PETITION: "{petition}"\n{binding_note}\n'
             "PRECEDENT — most recent entries in the Code of Laws (cite by ID if relevant):\n"
             f"{_precedent_lines(precedents)}\n\n"
             f"As {m['name']}, Minister of {m['portfolio']}, state your position "
@@ -86,68 +101,100 @@ def run_pipeline(petition: str, registry: Registry):
 
     # 3 — The bill: the Chancellor merges petition + amendments.
     chancellor = make_agent(legislature_model(max_tokens=1000), CHANCELLOR_SYSTEM)
+    if binding:
+        bill_instruction = (
+            "This is a BINDING CITIZENS' INITIATIVE under Art. 1: the bill MUST "
+            "enact the petition's core mechanism as written. Amendments may "
+            "regulate HOW it operates (scope, process, timing) but must not "
+            "prevent, indefinitely defer, or neutralize its operation. When in "
+            "doubt, enact the initiative as written."
+        )
+        bill_opening = "By binding citizens' initiative, AGORA enacts:"
+    else:
+        bill_instruction = (
+            "Merge the petition and the strongest amendments into the final bill. "
+            "Improve precision and address the stated concerns."
+        )
+        bill_opening = "The Parliament of AGORA enacts:"
     bill = safe_call(
         chancellor,
         f'ORIGINAL PETITION: "{petition}"\n\n'
         f"MINISTERS' POSITIONS AND AMENDMENTS:\n{positions_block}\n\n"
-        "Merge the petition and the strongest amendments into the final bill. "
-        "Improve precision and address the stated concerns. Output ONLY the bill "
-        'text, max 120 words, starting with "The Parliament of AGORA enacts:"',
-    ) or f"The Parliament of AGORA enacts: {petition} (bill unchanged — drafting service unavailable)."
+        f"{bill_instruction} Output ONLY the bill "
+        f'text, max 120 words, starting with "{bill_opening}"',
+    ) or f"{bill_opening} {petition} (bill unchanged — drafting service unavailable)."
     yield {"stage": "bill", "original": petition, "bill": bill}
 
-    # 4 — Vote: same agents, so each vote stays consistent with the position argued.
+    # 4 — Vote. A binding initiative was already decided by the citizens
+    # (Art. 1); ministers vote only in the parliamentary procedure.
     votes = []
-    for m, agent in cabinet:
-        raw = safe_call(
-            agent,
-            "The Chancellor has merged the amendments into the final bill.\n\n"
-            f"BILL: {bill}\n\n"
-            f"THE OPPOSITION'S OBJECTION (on the record): {opposition}\n\n"
-            f"Cast your vote on the bill as {m['name']}. STRICT JSON only:\n"
-            '{"vote": "YES" | "NO" | "ABSTAIN", "reason": "<max 15 words>"}',
-        )
-        data = extract_json(raw) or {}
-        vote = str(data.get("vote", "")).upper()
-        if vote not in ("YES", "NO", "ABSTAIN"):
-            vote = "ABSTAIN"
-        reason = str(data.get("reason", "")).strip() or "No reason recorded."
-        entry = {"minister": _public(m), "vote": vote, "reason": reason}
-        votes.append(entry)
-        yield {"stage": "vote", **entry}
+    if binding:
+        passed, result = True, "ENACTED BY CITIZENS' INITIATIVE"
+        yield {"stage": "tally", "yes": 0, "no": 0, "abstain": 0, "passed": True, "binding": True}
+    else:
+        for m, agent in cabinet:
+            raw = safe_call(
+                agent,
+                "The Chancellor has merged the amendments into the final bill.\n\n"
+                f"BILL: {bill}\n\n"
+                f"THE OPPOSITION'S OBJECTION (on the record): {opposition}\n\n"
+                f"Cast your vote on the bill as {m['name']}. STRICT JSON only:\n"
+                '{"vote": "YES" | "NO" | "ABSTAIN", "reason": "<max 15 words>"}',
+            )
+            data = extract_json(raw) or {}
+            vote = str(data.get("vote", "")).upper()
+            if vote not in ("YES", "NO", "ABSTAIN"):
+                vote = "ABSTAIN"
+            reason = str(data.get("reason", "")).strip() or "No reason recorded."
+            entry = {"minister": _public(m), "vote": vote, "reason": reason}
+            votes.append(entry)
+            yield {"stage": "vote", **entry}
 
-    yes = sum(v["vote"] == "YES" for v in votes)
-    no = sum(v["vote"] == "NO" for v in votes)
-    abstain = len(votes) - yes - no
-    passed = yes > no
-    result = "PASSED" if passed else "REJECTED"
-    yield {"stage": "tally", "yes": yes, "no": no, "abstain": abstain, "passed": passed}
+        yes = sum(v["vote"] == "YES" for v in votes)
+        no = sum(v["vote"] == "NO" for v in votes)
+        abstain = len(votes) - yes - no
+        passed = yes > no
+        result = "PASSED" if passed else "REJECTED"
+        yield {"stage": "tally", "yes": yes, "no": no, "abstain": abstain, "passed": passed}
 
     # 5 — Decree with implementation directive.
-    votes_block = "\n".join(
-        f"- {v['minister']['name']}: {v['vote']} — {v['reason']}" for v in votes
-    )
+    if binding:
+        result_line = "RESULT: ENACTED by binding citizens' initiative (Art. 1 — Human Sovereignty)."
+    else:
+        votes_block = "\n".join(
+            f"- {v['minister']['name']}: {v['vote']} — {v['reason']}" for v in votes
+        )
+        result_line = f"RESULT: {result} ({yes} YES / {no} NO / {abstain} ABSTAIN)\nVOTES:\n{votes_block}"
     decree = safe_call(
         chancellor,
-        "The vote on the bill is closed.\n"
-        f"RESULT: {result} ({yes} YES / {no} NO / {abstain} ABSTAIN)\n"
-        f"VOTES:\n{votes_block}\n\n"
+        "The decision on the bill is closed.\n"
+        f"{result_line}\n\n"
         f'Write the official decree of AGORA, titled "{law_id}". Structure:\n'
         f'1. Title line: "{law_id} — <short name of the matter>"\n'
-        "2. Result and exact vote split.\n"
-        "3. Core reasoning of the parliament, max 80 words.\n"
+        "2. Result" + ("" if binding else " and exact vote split") + ".\n"
+        "3. Core reasoning, max 80 words.\n"
         '4. "Implementation Directive:" with Action, Owner, Deadline (one line each, '
         "concrete; synthetic owners and dates are fine).\n"
         + ("" if passed else "The bill was REJECTED: the decree records the rejection and directs no action.\n")
         + "Output only the decree text.",
     ) or (
-        f"{law_id} — Decree of Record\nResult: {result} ({yes} YES / {no} NO / {abstain} ABSTAIN).\n"
+        f"{law_id} — Decree of Record\n{result_line}\n"
         f"Bill: {bill}\nImplementation Directive: Action: archive; Owner: Chancellery; Deadline: n/a."
     )
     yield {"stage": "decree", "law_id": law_id, "text": decree}
 
     # 6 — Constitutional review (strongest granted model), one revision loop on veto.
-    verdict = review(decree, precedents, opposition=opposition, votes=votes)
+    session_record = f"OPPOSITION ARGUMENT ON THE RECORD (Art. 3):\n{opposition}\n\n"
+    if binding:
+        session_record += (
+            "ENACTMENT: binding citizens' initiative under Art. 1 (Human "
+            "Sovereignty) — no parliamentary vote is required for such initiatives.\n\n"
+        )
+    else:
+        session_record += "VOTE RECORD:\n" + "\n".join(
+            f"- {v['minister']['name']}: {v['vote']} — {v['reason']}" for v in votes
+        ) + "\n\n"
+    verdict = review(decree, precedents, session_record)
     yield {"stage": "court", "round": 1, **verdict}
     status = verdict["verdict"]
     if verdict["verdict"] == "VETO":
@@ -162,7 +209,7 @@ def run_pipeline(petition: str, registry: Registry):
         if revised:
             decree = revised
             yield {"stage": "revision", "text": revised}
-            second = review(decree, precedents, opposition=opposition, votes=votes)
+            second = review(decree, precedents, session_record)
             yield {"stage": "court", "round": 2, **second}
             verdict = second
             status = "APPROVED" if second["verdict"] == "APPROVED" else "STRUCK DOWN"
@@ -175,6 +222,7 @@ def run_pipeline(petition: str, registry: Registry):
         bill=bill,
         decree=decree,
         votes=votes,
+        mode="citizens-initiative" if binding else "parliamentary",
         result=result,
         opposition=opposition,
         positions=positions,

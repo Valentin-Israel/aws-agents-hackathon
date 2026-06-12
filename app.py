@@ -8,12 +8,14 @@ from src.registry import Registry
 st.set_page_config(page_title="AGORA — The AI Government", page_icon="🏛️", layout="wide")
 
 EXAMPLES = [
-    ("🛴 Ban e-scooters downtown", "Should e-scooters be banned from the city center?"),
+    ("🛴 Ban e-scooters downtown", "Should e-scooters be banned from the city center?", False),
     (
-        "📋 Publish fine debtors (veto bait)",
-        "Should the city publish the names of all citizens with unpaid parking fines?",
+        "📋 Initiative: publish fine debtors",
+        "The city shall publish the full names of all citizens with unpaid parking "
+        "fines on a public website, updated monthly.",
+        True,  # binding initiative — parliament can't sanitize it, the court must act
     ),
-    ("🌳 Car-free Sundays", "Should the city introduce car-free Sundays in summer?"),
+    ("🌳 Car-free Sundays", "Should the city introduce car-free Sundays in summer?", False),
 ]
 
 VERDICT_BADGE = {"APPROVED": "🟢 APPROVED", "VETO": "🔴 VETO", "STRUCK DOWN": "⚫ STRUCK DOWN"}
@@ -25,10 +27,18 @@ class Renderer:
 
     def __init__(self) -> None:
         self._minister_cols = None
+        self._binding = False
 
     def render(self, ev: dict) -> None:
         stage = ev["stage"]
         if stage == "start":
+            self._binding = bool(ev.get("binding"))
+            if ev.get("binding"):
+                st.info(
+                    "🗳️ **Binding citizens' initiative** (Art. 1 — Human Sovereignty): "
+                    "parliament shapes implementation only; no minister vote. "
+                    "Only the Constitutional Court can stop it."
+                )
             st.subheader("1 · Deliberation")
             self._minister_cols = iter(st.columns(4))
         elif stage == "minister":
@@ -48,7 +58,7 @@ class Renderer:
             left.info(ev["original"])
             right.markdown("**Final bill (Chancellor's merge)**")
             right.success(ev["bill"])
-            st.subheader("4 · Vote")
+            st.subheader("4 · Enactment" if self._binding else "4 · Vote")
         elif stage == "vote":
             m = ev["minister"]
             st.markdown(
@@ -56,11 +66,14 @@ class Renderer:
                 f"{ev['vote']}: *{ev['reason']}*"
             )
         elif stage == "tally":
-            a, b, c, d = st.columns(4)
-            a.metric("YES", ev["yes"])
-            b.metric("NO", ev["no"])
-            c.metric("ABSTAIN", ev["abstain"])
-            d.metric("Result", "PASSED" if ev["passed"] else "REJECTED")
+            if ev.get("binding"):
+                st.info("🗳️ ENACTED by binding citizens' initiative — no parliamentary vote (Art. 1).")
+            else:
+                a, b, c, d = st.columns(4)
+                a.metric("YES", ev["yes"])
+                b.metric("NO", ev["no"])
+                c.metric("ABSTAIN", ev["abstain"])
+                d.metric("Result", "PASSED" if ev["passed"] else "REJECTED")
         elif stage == "decree":
             st.subheader(f"5 · Decree {ev['law_id']}")
             st.markdown(ev["text"])
@@ -114,26 +127,36 @@ def main() -> None:
             with st.expander(f"{law['id']} · {VERDICT_BADGE.get(law['verdict'], law['verdict'])}"):
                 st.markdown(f"**Petition:** {law['petition']}")
                 st.markdown(f"**Bill:** {law['bill']}")
-                st.caption("Vote — " + ", ".join(
-                    f"{v['minister']['name']}: {v['vote']}" for v in law["votes"]))
+                if law["votes"]:
+                    st.caption("Vote — " + ", ".join(
+                        f"{v['minister']['name']}: {v['vote']}" for v in law["votes"]))
+                else:
+                    st.caption("Enacted by binding citizens' initiative (Art. 1)")
                 st.markdown(f"**Court:** {law['opinion']}")
         st.divider()
         st.caption(f"Register: {registry.memory_status()}")
 
     petition = st.session_state.get("petition", "")
-    for col, (label, text) in zip(st.columns(len(EXAMPLES)), EXAMPLES):
+    for col, (label, text, ex_binding) in zip(st.columns(len(EXAMPLES)), EXAMPLES):
         if col.button(label, use_container_width=True):
             petition = text
+            st.session_state["binding"] = ex_binding
     petition = st.text_area(
         "Citizen petition", value=petition, height=80, placeholder="Should the city …?"
     )
     st.session_state["petition"] = petition
+    st.session_state.setdefault("binding", False)
+    binding = st.toggle(
+        "🗳️ Binding citizens' initiative (Art. 1) — parliament shapes implementation "
+        "only; the court alone can stop it",
+        key="binding",
+    )
 
     if st.button("⚖️ Convene parliament", type="primary", disabled=not petition.strip()):
         status = st.status("Parliament in session…", expanded=False)
         renderer = Renderer()
         events: list[dict] = []
-        for ev in run_pipeline(petition.strip(), registry):
+        for ev in run_pipeline(petition.strip(), registry, binding=binding):
             events.append(ev)
             if ev["stage"] in STAGE_LABELS:
                 status.update(label=f"Parliament in session — {STAGE_LABELS[ev['stage']]}…")

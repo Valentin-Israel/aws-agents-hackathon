@@ -23,8 +23,10 @@ COURT_SYSTEM = (
     "You APPROVE a decree unless it violates an article; you VETO when it does, "
     "citing the violated article(s). Violations of Art. 5 — privacy, dignity, "
     "equal treatment — are non-negotiable. Procedural defects matter: a decree "
-    "without an opposition argument on the record breaches Art. 3. "
-    "You answer in strict JSON and nothing else."
+    "without an opposition argument on the record breaches Art. 3. Binding "
+    "citizens' initiatives (Art. 1) are enacted without a parliamentary vote, "
+    "yet remain fully subject to your review — fundamental rights bind even "
+    "popular majorities. You answer in strict JSON and nothing else."
 )
 
 
@@ -62,25 +64,13 @@ def _call_court(prompt: str) -> tuple[str | None, str | None]:
     return None, None
 
 
-def review(
-    decree: str,
-    precedents: list[dict],
-    opposition: str | None = None,
-    votes: list[dict] | None = None,
-) -> dict:
+def review(decree: str, precedents: list[dict], session_record: str = "") -> dict:
     # The court reviews the decree together with the session record — without
     # it, Art. 3 (opposition on the record) looks violated on every decree.
-    record = ""
-    if opposition:
-        record += f"OPPOSITION ARGUMENT ON THE RECORD (Art. 3):\n{opposition}\n\n"
-    if votes:
-        record += "VOTE RECORD:\n" + "\n".join(
-            f"- {v['minister']['name']}: {v['vote']} — {v['reason']}" for v in votes
-        ) + "\n\n"
     prompt = (
         "Review this decree of the Parliament of AGORA.\n\n"
         f"DECREE:\n{decree}\n\n"
-        f"{record}"
+        f"{session_record}"
         f"EXISTING CODE OF LAWS (precedent):\n{_precedent_block(precedents)}\n\n"
         "Check the decree against every article of the Constitution and against "
         "precedent. Reply with STRICT JSON only:\n"

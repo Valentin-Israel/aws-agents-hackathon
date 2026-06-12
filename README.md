@@ -19,9 +19,19 @@ pip install -r requirements.txt
 # Full pipeline in the terminal
 python3 -m src.cli "Should e-scooters be banned from the city center?"
 
+# Binding citizens' initiative (Art. 1): parliament shapes implementation only —
+# it cannot reject or invert the initiative. Only the court can stop it.
+# This is the live-veto demo path: the parliament's four value systems otherwise
+# sanitize rights-violating petitions before the court ever sees them.
+python3 -m src.cli --binding "The city shall publish the full names of all citizens with unpaid parking fines on a public website, updated monthly."
+
 # Parliament chamber UI
 streamlit run app.py
 ```
+
+Demo note: `laws.json` and the AgentCore Memory mirror stay in sync — reset both or
+neither. Don't wipe `laws.json` alone: precedent reads come from Memory when active,
+and the live-veto arc leans on AGORA-2026-002 (privacy precedent) being on the bench.
 
 ## Layout
 
