@@ -2,7 +2,7 @@
 
 ## https://agora.valentin.is/
 
-🏆 Award: AGORA won 1st Prize at the AWS × Rebura "Build with Agents" Hackathon (Munich, Jun 2026).
+## 🏆 Award: AGORA won 1st Prize at the AWS × Rebura "Build with Agents" Hackathon (Munich, Jun 2026).
 
 Deliberation as infrastructure, built at AWS × Rebura "Build with Agents" (Munich, Jun 2026).
 See `WHITEPAPER.md` for the full vision.
